@@ -344,14 +344,148 @@ section "Source website."  Declaring a resource more than once is not
 allowed.  Resource files must have the same parent directory as the XML
 source file (that is, they must be in the same directory and not a
 subdirectory).  The Spoor script will embed each named resource file
-within generated E-Book.
+within the generated E-Book.
 
 B<Important:> Resources files may not have any extension corresponding
 to an XHTML text file.
 
-@@TODO:
+=head3 Supplement section
+
+The supplement section of the XML source file lists all XHTML text
+documents that are B<not> part of the main reading order of the book.
+The section is optional, with the absence of the section meaning the
+same thing as the section being present but empty.
+
+The supplement section stores a set of zero or more text elements, each
+of which has a required C<name> attribute that names an XHTML file.  For
+example:
+
+  <supplement>
+    <text name="pic01_desc.html"/>
+    <text name="pic02_desc.html"/>
+  </supplement>
+
+All supplement names must follow the restrictions given earlier in the
+section "Source website."  Declaring the same supplement more than once
+is not allowed.  Supplement files must have the same parent directory as
+the XML source file (that is, they must be in the same directory and not
+a subdirectory).  The Spoor script will embed each supplement within the
+generated E-Book.
+
+All supplement names must furthermore have one of the file extensions
+corresponding to an XHTML document.
+
+Supplements should somehow be accessible from links in the main text
+nodes with the book (see the "Book section" below).  They will not,
+however, be directly included in the main reading sequence of the
+E-Book.
+
+=head3 Book section
+
+The book section of the XML source file lists all XHTML text documents
+that are part of the main reading order of the book.  The section is
+required, and must have at least one text node within it.  For XHTML
+files that are not part of the main reading order, put them instead in
+the supplement section (see previous section).
+
+The book section stores a sequence of one or more text elements, each of
+which has a required C<name> attribute that names an XHTML file.  The
+order is significant, and it determines the order in which the files
+will be presented in the E-Reader.  For example:
+
+  <book>
+    <text name="main.html"/>
+    <text name="chapter_2.html"/>
+    <text name="chapter_3.html"/>
+  </book>
+
+All book text node names must follow the restrictions given earlier in
+the section "Source website."  Declaring the same book text node more
+than once is not allowed.  Book text nodes must have the same parent
+directory as the XML source file (that is, they must be in the same
+directory and not a subdirectory).  The Spoor script will embed each
+book text node within the generated E-Book.
+
+All book text node names must furthermore have one of the file
+extensions corresponding to an XHTML document.  Finally, none of the
+names of text nodes given in the book section may match any of the names
+given in the supplement section; a text node can be in the supplement or
+the book, but not both.
+
+=head3 Navigation section
+
+The navigation section of the XML source file defines a hierarchical
+tree structure for navigating through the E-Book, and determines how the
+nodes of the tree structure map to locations within the E-Book.  This
+section is required, and must have at least one node within it.
+
+The navigation section tag may optionally have a C<language> attribute
+that determines the language used for textual data within the navigation
+section.  If not specified, it is inherited from the first language
+element defined within the metadata section, or else is left undefined
+if there are no language elements in the metadata section.
+
+Each node within the navigation section may optionally have a
+C<language> attribute that sets the language for the node and all
+descendant nodes.  If not specified, the node inherits the language
+setting from the parent node, or from the navigation section tag if the
+node has no node parent.
+
+For example, consider the following:
+
+  <nav language="en">
+    <node name="Cover" ... />
+    <node name="Introduction"  ... >
+      <node name="Example subsection" ... />
+      <node name="Je ne sais quoi" language="fr" ... >
+        <node name="Plus de mots" ... />
+        <node name="English once again" language="en" ... />
+      </node>
+    </node>
+    <node name="Chapter 2: An old ending" ... />
+    <node name="Chapter 3: A new beginning" ... />
+  </nav>
+
+In this navigation section, all nodes have a declared language of C<en>
+(English), except for the I<Je ne sais quoi> node and the I<Plus de
+mots> node, which both have a declared language of C<fr> (French).
+
+These language declarations only apply to the name of the section within
+the navigation section.  They have no relationship to the language
+actually used for the text within the book (though of course that is
+usually the same).
+
+Each node has a C<target> that indicates the location within the E-Book
+that the node corresponds to.  Each target must begin with the name of
+one of the text nodes that was defined in either the supplement or the
+book section.  Optionally, a pound sign followed by a string of one or
+more US-ASCII alphanumerics may be suffixed to the text node name,
+specifying an anchor name within the document.  Spoor does not check
+whether these anchors actually exist within the document, though they
+should.
+
+Finally, each node has a C<name> that is the name of the section when it
+appears in the navigation structure in the E-Reader.  The language of
+this text is determined by the language associated with the node, as
+explained earlier in this section.  No automatic numbering is applied,
+so if there is some kind of numbering, it should be included in the
+name.
+
+Example of a full navigation section:
+
+  <nav language="en">
+    <node name="Cover" target="main.html#cover"/>
+    <node name="Introduction" target="main.html#intro">
+      <node name="Example subsection" target="main.html#subsection"/>
+      <node name="Je ne sais quoi" target="main.html#wh" language="fr"/>
+    </node>
+    <node name="Chapter 2: An old ending" target="chapter_2.html"/>
+    <node name="Chapter 3: A new beginning" target="chapter_3.html"/>
+  </nav>
 
 =cut
+
+# @@TODO:
 
 =head1 AUTHOR
 
