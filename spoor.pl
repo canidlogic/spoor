@@ -495,11 +495,15 @@ EOD
 # This function assumes that all links refer to "content.html" or
 # anchors within that file.
 #
+# The given language code should be the xml:lang attribute value from
+# the <nav> element, or if there is no such attribute, the xml:lang
+# attribute value from the root <spoor> element.
+#
 # Parameters:
 #
 #   1 - reference to parsed <nav> element content
 #
-#   2 : string - default language code from the XML root element
+#   2 : string - default language code
 #
 #   3 : string - the (unescaped) title of the E-Book
 #
@@ -525,6 +529,9 @@ sub gen_ncx {
   $root_lang  = "$root_lang";
   $book_title = "$book_title";
   $book_id    = "$book_id";
+  
+  (check_language_code($root_lang)) or
+    die "Invalid language code '$root_lang', stopped";
   
   # @@TODO:
   return 'NCX file';
@@ -705,6 +712,7 @@ sub parse_xml {
   
   my $metadata;
   my $nav;
+  my $nav_root;
   
   for my $e (@{$xf->[0]->{'content'}}) {
     # Ignore if not a true element
@@ -726,6 +734,7 @@ sub parse_xml {
       # Found the nav section
       if ($has_nav == 0) {
         $nav = $e->{'content'};
+        $nav_root = $e;
         $has_nav = 1;
       } else {
         die "Multiple <nav> sections in XML, stopped";
@@ -764,8 +773,16 @@ $mani_str
 
 EOD
   
+  # Determine the root language for the NCX file
+  my $ncx_lang = $root_lang;
+  if (exists $nav_root->{'attrib'}->{'xml:lang'}) {
+    $ncx_lang = $nav_root->{'attrib'}->{'xml:lang'};
+    (check_language_code($ncx_lang)) or
+      die "Invalid language code '$ncx_lang', stopped";
+  }
+  
   # Generate the NCX file
-  my $ncx_text = gen_ncx($nav, $root_lang, $book_title, $book_id);
+  my $ncx_text = gen_ncx($nav, $ncx_lang, $book_title, $book_id);
 
   # Return the generated files
   return ($opf_text, $ncx_text);
