@@ -578,6 +578,12 @@ sub fold_elements {
 # Parse the XML metadata file and use it to generate the OPF file and
 # the NCX file.
 #
+# The given resource path array only refers to the extra resources that
+# were passed on the command line.  This function always assumes that
+# there will be a "content.html" XHTML file, that the generated NCX file
+# will be placed in "toc.ncx", and that both these files and all
+# reference files will be in the same directory in the archive.
+#
 # Parameters:
 #
 #   1 : string - the path to the XML metadata file
@@ -683,8 +689,6 @@ sub parse_xml {
   
   # Build the manifest section
   my $mani_str = gen_manifest($ares);
-  
-  # @@TODO:
   
   # Now put together the whole OPF file
   my $opf_text = <<EOD;
