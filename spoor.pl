@@ -76,6 +76,325 @@ sub esc_xml_att {
   return $_[0];
 }
 
+# Generate the metadata section of the OPF file.
+#
+# The given reference must be to the content of the parsed <metadata>
+# element, and this function assumes that fold_elements() has already
+# been applied to it.
+#
+# A <dc:identifier> element is always included in the generated metadata
+# section that has an element ID of "ebook_uid"
+#
+# Parameters:
+#
+#   1 - reference to parsed <metadata> element content
+#
+#   2 : string - the code for the language to declare
+#
+# Return:
+#
+#   string - the <metadata> section that should be placed in the OPF
+#   file, including the <metadata> tags
+#
+sub gen_meta {
+  # Should have exactly two arguments
+  ($#_ == 1) or die "Wrong number of arguments, stopped";
+  
+  # Get arguments
+  my $metadata  = shift;
+  my $root_lang = shift;
+  
+  # Verify that metadata is an array ref
+  (ref($metadata) eq 'ARRAY') or die "Wrong argument type, stopped";
+  
+  # Set language code type and check it
+  $root_lang = "$root_lang";
+  (check_language_code($root_lang)) or
+    die "Invalid language code '$root_lang', stopped";
+  
+  # Now go through the metadata section and build a hash of the data in
+  # the %md hash
+  my %md;
+  for my $e (@{$metadata}) {
+    # Ignore if not a true element
+    if ($e->{'type'} ne 'e') {
+      next;
+    }
+    
+    # Handle specific element, ignoring unidentified ones
+    if ($e->{'name'} eq 'title') { # -----------------------------------
+      # Only one title allowed
+      (not exists $md{'title'}) or
+        die "Multiple <title>s in XML metadata, stopped";
+      
+      # Must have a "text" attribute
+      (exists $e->{'attrib'}->{'text'}) or
+        die "<title> in XML metadata missing text prop, stopped";
+      
+      # Store title
+      $md{'title'} = "$e->{'attrib'}->{'text'}";
+      
+    } elsif ($e->{'name'} eq 'creator') { # ----------------------------
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<creator> in XML metadata missing name prop, stopped";
+      
+      # If creator property not defined yet, set to empty array
+      if (not exists $md{'creator'}) {
+        $md{'creator'} = [];
+      }
+      
+      # Create hashref for the new creator
+      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
+      if (exists $e->{'attrib'}->{'role'}) {
+        (check_role($e->{'attrib'}->{'role'})) or
+          die "Invalid XML metadata person role: " .
+              "'$e->{'attrib'}->{'role'}', stopped";
+        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+      }
+      if (exists $e->{'attrib'}->{'sort'}) {
+        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
+      }
+      
+      # Add the new creator
+      push @{$md{'creator'}}, ($new_e);
+      
+    } elsif ($e->{'name'} eq 'description') { # ------------------------
+      # Only one description allowed
+      (not exists $md{'description'}) or
+        die "Multiple <description>s in XML metadata, stopped";
+      
+      # Go through text content to build the full value
+      my $full_str = '';
+      for my $f (@{$e->{'content'}}) {
+        # Verify that this is a text node
+        ($f->{'type'} eq 't') or
+          die "<description> in XML metadata may only " .
+              "contain text, stopped";
+        
+        # Add content to full string
+        $full_str = $full_str . "$f->{'content'}";
+      }
+      
+      # Store description
+      $md{'description'} = $full_str;
+      
+    } elsif ($e->{'name'} eq 'publisher') { # --------------------------
+      # Only one publisher allowed
+      (not exists $md{'publisher'}) or
+        die "Multiple <publisher>s in XML metadata, stopped";
+      
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<publisher> in XML metadata missing name prop, stopped";
+      
+      # Add the publisher
+      $md{'publisher'} = "$e->{'attrib'}->{'name'}";
+      
+    } elsif ($e->{'name'} eq 'contributor') { # ------------------------
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<contributor> in XML metadata missing name prop, stopped";
+      
+      # If contributor property not defined yet, set to empty array
+      if (not exists $md{'contributor'}) {
+        $md{'contributor'} = [];
+      }
+      
+      # Create hashref for the new contributor
+      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
+      if (exists $e->{'attrib'}->{'role'}) {
+        (check_role($e->{'attrib'}->{'role'})) or
+          die "Invalid XML metadata person role: " .
+              "'$e->{'attrib'}->{'role'}', stopped";
+        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+      }
+      if (exists $e->{'attrib'}->{'sort'}) {
+        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
+      }
+      
+      # Add the new contributor
+      push @{$md{'contributor'}}, ($new_e);
+      
+    } elsif ($e->{'name'} eq 'date') { # -------------------------------
+      # Must have an "event" and "value" attribute
+      (exists $e->{'attrib'}->{'event'}) or
+        die "<date> in XML metadata missing event prop, stopped";
+      (exists $e->{'attrib'}->{'value'}) or
+        die "<date> in XML metadata missing value prop, stopped";
+      
+      # Get the date type
+      my $dtype = fc($e->{'attrib'}->{'event'});
+      
+      # Check the date type
+      (($dtype eq 'creation') or
+          ($dtype eq 'publication') or
+          ($dtype eq 'modification')) or
+        die "Unknown <date> event type '$dtype' " .
+            "in XML metadata, stopped";
+      
+      # Make sure this particular date is not set yet
+      (not exists $md{"date_$dtype"}) or
+        die "Same <date> event type may not occur more than once " .
+          " in XML metadata, stopped";
+      
+      # Get the date value
+      my $dval = "$e->{'attrib'}->{'value'}";
+      
+      # Check the date format
+      (check_date($dval)) or die "Invalid <date> '$dval' " .
+        "in XML metadata, stopped";
+      
+      # Store the date value
+      $md{"date_$dtype"} = $dval;
+      
+    } elsif ($e->{'name'} eq 'identifier') { # -------------------------
+      # Only one identifier allowed
+      (not exists $md{'identifier'}) or
+        die "Multiple <identifier>s in XML metadata, stopped";
+      
+      # Must have a "scheme" and "value" attribute
+      (exists $e->{'attrib'}->{'scheme'}) or
+        die "<identifier> in XML metadata missing scheme prop, stopped";
+      (exists $e->{'attrib'}->{'value'}) or
+        die "<identifier> in XML metadata missing value prop, stopped";
+      
+      # Store as a hashref
+      $md{'identifier'} = {
+        scheme => "$e->{'attrib'}->{'scheme'}",
+        value => "$e->{'attrib'}->{'value'}"
+      };
+      
+    } elsif ($e->{'name'} eq 'rights') { # -----------------------------
+      # Only one rights allowed
+      (not exists $md{'rights'}) or
+        die "Multiple <rights>s in XML metadata, stopped";
+      
+      # Go through text content to build the full value
+      my $full_str = '';
+      for my $f (@{$e->{'content'}}) {
+        # Verify that this is a text node
+        ($f->{'type'} eq 't') or
+          die "<rights> in XML metadata may only contain text, stopped";
+        
+        # Add content to full string
+        $full_str = $full_str . "$f->{'content'}";
+      }
+      
+      # Store rights
+      $md{'rights'} = $full_str;
+    }
+  }
+  
+  # Check that title and identifier are defined
+  (exists $md{'title'}) or
+    die "Missing <title> in XML metadata, stopped";
+  (exists $md{'identifier'}) or
+    die "Missing <identifier> in XML metadata, stopped";
+  
+  # Build the metadata section of the OPF file
+  my $pval;
+  my $meta_str = <<'EOD';
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"
+            xmlns:opf="http://www.idpf.org/2007/opf">
+EOD
+  
+  # Add the <dc:title> element
+  $pval = esc_xml_text($md{'title'});
+  $meta_str = $meta_str . "    <dc:title>$md{'title'}</dc:title>\n";
+  
+  # Add any <dc:creator> elements
+  if (exists $md{'creator'}) {
+    for my $cr (@{$md{'creator'}}) {
+      $meta_str = $meta_str . "    <dc:creator";
+      if (exists $cr->{'sort'}) {
+        $pval = esc_xml_att($cr->{'sort'});
+        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
+      }
+      if (exists $cr->{'role'}) {
+        $pval = esc_xml_att($cr->{'role'});
+        $meta_str = $meta_str . " opf:role=\"$pval\"";
+      }
+      $pval = esc_xml_text($cr->{'name'});
+      $meta_str = $meta_str . ">$pval</dc:creator>\n";
+    }
+  }
+  
+  # Add the optional <dc:description> element
+  if (exists $md{'description'}) {
+    $pval = esc_xml_text($md{'description'});
+    $meta_str = $meta_str
+      . "    <dc:description>$pval</dc:description>\n";
+  }
+  
+  # Add the optional <dc:publisher> element
+  if (exists $md{'publisher'}) {
+    $pval = esc_xml_text($md{'publisher'});
+    $meta_str = $meta_str
+      . "    <dc:publisher>$pval</dc:publisher>\n";
+  }
+  
+  # Add any <dc:contributor> elements
+  if (exists $md{'contributor'}) {
+    for my $cr (@{$md{'contributor'}}) {
+      $meta_str = $meta_str . "    <dc:contributor";
+      if (exists $cr->{'sort'}) {
+        $pval = esc_xml_att($cr->{'sort'});
+        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
+      }
+      if (exists $cr->{'role'}) {
+        $pval = esc_xml_att($cr->{'role'});
+        $meta_str = $meta_str . " opf:role=\"$pval\"";
+      }
+      $pval = esc_xml_text($cr->{'name'});
+      $meta_str = $meta_str . ">$pval</dc:contributor>\n";
+    }
+  }
+  
+  # Add any <dc:date> elements
+  if (exists $md{'date_creation'}) {
+    $pval = esc_xml_text($md{'date_creation'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"creation\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  if (exists $md{'date_publication'}) {
+    $pval = esc_xml_text($md{'date_publication'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"publication\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  if (exists $md{'date_modification'}) {
+    $pval = esc_xml_text($md{'date_modification'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"modification\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  # Add the <dc:identifier> element
+  $pval = esc_xml_att($md{'identifier'}->{'scheme'});
+  $meta_str = $meta_str . "    <dc:identifier id=\"ebook_uid\" "
+                  . "opf:scheme=\"$pval\">";
+  $pval = esc_xml_text($md{'identifier'}->{'value'});
+  $meta_str = $meta_str . "$pval</dc:identifier>\n";
+  
+  # Add the <dc:language> element
+  $pval = esc_xml_text($root_lang);
+  $meta_str = $meta_str . "    <dc:language>$pval</dc:language>\n";
+  
+  # Add the optional <dc:rights> element
+  if (exists $md{'rights'}) {
+    $pval = esc_xml_text($md{'rights'});
+    $meta_str = $meta_str
+      . "    <dc:rights>$pval</dc:rights>\n";
+  }
+  
+  # Finish the constructed metadata section
+  $meta_str = $meta_str . "  </metadata>\n";
+  
+  # Return result
+  return $meta_str;
+}
+
 # Recursively case-fold all element names and attribute names to
 # lowercase in a parsed XML document.
 #
@@ -277,267 +596,8 @@ sub parse_xml {
   ($has_metadata) or die "Missing <metadata> section in XML, stopped";
   ($has_nav) or die "Missing <nav> section in XML, stopped";
   
-  # Now go through the metadata section and build a hash of the data
-  my %md;
-  for my $e (@{$metadata}) {
-    # Ignore if not a true element
-    if ($e->{'type'} ne 'e') {
-      next;
-    }
-    
-    # Handle specific element, ignoring unidentified ones
-    if ($e->{'name'} eq 'title') {
-      # Only one title allowed
-      (not exists $md{'title'}) or
-        die "Multiple titles in XML, stopped";
-      
-      # Must have a "text" attribute
-      (exists $e->{'attrib'}->{'text'}) or
-        die "<title> in XML missing text prop, stopped";
-      
-      # Store title
-      $md{'title'} = "$e->{'attrib'}->{'text'}";
-      
-    } elsif ($e->{'name'} eq 'creator') {
-      # Must have a "name" attribute
-      (exists $e->{'attrib'}->{'name'}) or
-        die "<creator> in XML missing name prop, stopped";
-      
-      # If creator property not defined yet, set to empty array
-      if (not exists $md{'creator'}) {
-        $md{'creator'} = [];
-      }
-      
-      # Create hashref for the new creator
-      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
-      if (exists $e->{'attrib'}->{'role'}) {
-        (check_role($e->{'attrib'}->{'role'})) or
-    die "Invalid XML person role: '$e->{'attrib'}->{'role'}', stopped";
-        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
-      }
-      if (exists $e->{'attrib'}->{'sort'}) {
-        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
-      }
-      
-      # Add the new creator
-      push @{$md{'creator'}}, ($new_e);
-      
-    } elsif ($e->{'name'} eq 'description') {
-      # Only one description allowed
-      (not exists $md{'description'}) or
-        die "Multiple descriptions in XML, stopped";
-      
-      # Go through text content to build the full value
-      my $full_str = '';
-      for my $f (@{$e->{'content'}}) {
-        # Verify that this is a text node
-        ($f->{'type'} eq 't') or
-          die "<description> in XML may only contain text, stopped";
-        
-        # Add content to full string
-        $full_str = $full_str . "$f->{'content'}";
-      }
-      
-      # Store description
-      $md{'description'} = $full_str;
-      
-    } elsif ($e->{'name'} eq 'publisher') {
-      # Only one publisher allowed
-      (not exists $md{'publisher'}) or
-        die "Multiple publishers in XML, stopped";
-      
-      # Must have a "name" attribute
-      (exists $e->{'attrib'}->{'name'}) or
-        die "<publisher> in XML missing name prop, stopped";
-      
-      # Add the publisher
-      $md{'publisher'} = "$e->{'attrib'}->{'name'}";
-      
-    } elsif ($e->{'name'} eq 'contributor') {
-      # Must have a "name" attribute
-      (exists $e->{'attrib'}->{'name'}) or
-        die "<contributor> in XML missing name prop, stopped";
-      
-      # If contributor property not defined yet, set to empty array
-      if (not exists $md{'contributor'}) {
-        $md{'contributor'} = [];
-      }
-      
-      # Create hashref for the new contributor
-      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
-      if (exists $e->{'attrib'}->{'role'}) {
-        (check_role($e->{'attrib'}->{'role'})) or
-    die "Invalid XML person role: '$e->{'attrib'}->{'role'}', stopped";
-        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
-      }
-      if (exists $e->{'attrib'}->{'sort'}) {
-        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
-      }
-      
-      # Add the new contributor
-      push @{$md{'contributor'}}, ($new_e);
-      
-    } elsif ($e->{'name'} eq 'date') {
-      # Must have an "event" and "value" attribute
-      (exists $e->{'attrib'}->{'event'}) or
-        die "<date> in XML missing event prop, stopped";
-      (exists $e->{'attrib'}->{'value'}) or
-        die "<date> in XML missing value prop, stopped";
-      
-      # Get the date type
-      my $dtype = fc($e->{'attrib'}->{'event'});
-      
-      # Check the date type
-      (($dtype eq 'creation') or
-          ($dtype eq 'publication') or
-          ($dtype eq 'modification')) or
-        die "Unknown event type '$dtype' in XML, stopped";
-      
-      # Make sure this particular date is not set yet
-      (not exists $md{"date_$dtype"}) or
-        die "Same date event redefined in XML, stopped";
-      
-      # Get the date value
-      my $dval = "$e->{'attrib'}->{'value'}";
-      
-      # Check the date format
-      (check_date($dval)) or die "Invalid date '$dval' in XML, stopped";
-      
-      # Store the date value
-      $md{"date_$dtype"} = $dval;
-      
-    } elsif ($e->{'name'} eq 'identifier') {
-      # Only one identifier allowed
-      (not exists $md{'identifier'}) or
-        die "Multiple identifiers in XML, stopped";
-      
-      # Must have a "scheme" and "value" attribute
-      (exists $e->{'attrib'}->{'scheme'}) or
-        die "<identifier> in XML missing scheme prop, stopped";
-      (exists $e->{'attrib'}->{'value'}) or
-        die "<identifier> in XML missing value prop, stopped";
-      
-      # Store as a hashref
-      $md{'identifier'} = {
-        scheme => "$e->{'attrib'}->{'scheme'}",
-        value => "$e->{'attrib'}->{'value'}"
-      };
-      
-    } elsif ($e->{'name'} eq 'rights') {
-      # Only one rights allowed
-      (not exists $md{'rights'}) or
-        die "Multiple rights in XML, stopped";
-      
-      # Go through text content to build the full value
-      my $full_str = '';
-      for my $f (@{$e->{'content'}}) {
-        # Verify that this is a text node
-        ($f->{'type'} eq 't') or
-          die "<rights> in XML may only contain text, stopped";
-        
-        # Add content to full string
-        $full_str = $full_str . "$f->{'content'}";
-      }
-      
-      # Store rights
-      $md{'rights'} = $full_str;
-    }
-  }
-  
-  # Check that title and identifier are defined
-  (exists $md{'title'}) or
-    die "Missing <title> in XML, stopped";
-  (exists $md{'identifier'}) or
-    die "Missing <identifier> in XML, stopped";
-  
-  # Build the metadata section of the OPF file
-  my $pval;
-  my $meta_str = <<'EOD';
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"
-            xmlns:opf="http://www.idpf.org/2007/opf">
-EOD
-  
-  $pval = esc_xml_text($md{'title'});
-  $meta_str = $meta_str . "    <dc:title>$md{'title'}</dc:title>\n";
-  
-  if (exists $md{'creator'}) {
-    for my $cr (@{$md{'creator'}}) {
-      $meta_str = $meta_str . "    <dc:creator";
-      if (exists $cr->{'sort'}) {
-        $pval = esc_xml_att($cr->{'sort'});
-        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
-      }
-      if (exists $cr->{'role'}) {
-        $pval = esc_xml_att($cr->{'role'});
-        $meta_str = $meta_str . " opf:role=\"$pval\"";
-      }
-      $pval = esc_xml_text($cr->{'name'});
-      $meta_str = $meta_str . ">$pval</dc:creator>\n";
-    }
-  }
-  
-  if (exists $md{'description'}) {
-    $pval = esc_xml_text($md{'description'});
-    $meta_str = $meta_str
-      . "    <dc:description>$pval</dc:description>\n";
-  }
-  
-  if (exists $md{'publisher'}) {
-    $pval = esc_xml_text($md{'publisher'});
-    $meta_str = $meta_str
-      . "    <dc:publisher>$pval</dc:publisher>\n";
-  }
-  
-  if (exists $md{'contributor'}) {
-    for my $cr (@{$md{'contributor'}}) {
-      $meta_str = $meta_str . "    <dc:contributor";
-      if (exists $cr->{'sort'}) {
-        $pval = esc_xml_att($cr->{'sort'});
-        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
-      }
-      if (exists $cr->{'role'}) {
-        $pval = esc_xml_att($cr->{'role'});
-        $meta_str = $meta_str . " opf:role=\"$pval\"";
-      }
-      $pval = esc_xml_text($cr->{'name'});
-      $meta_str = $meta_str . ">$pval</dc:contributor>\n";
-    }
-  }
-  
-  if (exists $md{'date_creation'}) {
-    $pval = esc_xml_text($md{'date_creation'});
-    $meta_str = $meta_str . "    <dc:date opf:event=\"creation\">";
-    $meta_str = $meta_str . "$pval</dc:date>\n";
-  }
-  
-  if (exists $md{'date_publication'}) {
-    $pval = esc_xml_text($md{'date_publication'});
-    $meta_str = $meta_str . "    <dc:date opf:event=\"publication\">";
-    $meta_str = $meta_str . "$pval</dc:date>\n";
-  }
-  
-  if (exists $md{'date_modification'}) {
-    $pval = esc_xml_text($md{'date_modification'});
-    $meta_str = $meta_str . "    <dc:date opf:event=\"modification\">";
-    $meta_str = $meta_str . "$pval</dc:date>\n";
-  }
-  
-  $pval = esc_xml_att($md{'identifier'}->{'scheme'});
-  $meta_str = $meta_str . "    <dc:identifier id=\"ebook_uid\" "
-                  . "opf:scheme=\"$pval\">";
-  $pval = esc_xml_text($md{'identifier'}->{'value'});
-  $meta_str = $meta_str . "$pval</dc:identifier>\n";
-  
-  $pval = esc_xml_text($root_lang);
-  $meta_str = $meta_str . "    <dc:language>$pval</dc:language>\n";
-  
-  if (exists $md{'rights'}) {
-    $pval = esc_xml_text($md{'rights'});
-    $meta_str = $meta_str
-      . "    <dc:rights>$pval</dc:rights>\n";
-  }
-  
-  $meta_str = $meta_str . "  </metadata>\n";
+  # Build the metadata section
+  my $meta_str = gen_meta($metadata, $root_lang);
   
   # Build the manifest section of the OPF file
   my $mani_str = <<'EOD';
