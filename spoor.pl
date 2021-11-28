@@ -67,6 +67,12 @@ sub check_date {
 }
 
 # @@TODO:
+sub check_target {
+  # @@TODO:
+  return 1;
+}
+
+# @@TODO:
 sub esc_xml_text {
   # @@TODO:
   return $_[0];
@@ -486,6 +492,178 @@ EOD
   return $mani_str;
 }
 
+# Recursively generate the navigation tree in the NCX file.
+#
+# This generates a sequence of <navPoint> elements, which may have
+# nested elements within them.  It does NOT generate the surrounding
+# <navMap> elements.
+#
+# The given reference must be to the content of the root <nav> element
+# or to the content of a nested <node> element somewhere.
+#
+# Each <navPoint> element is given a playOrder one greater than the
+# last.  The first playOrder that will be assigned to a generated
+# element is passed as a parameter to this function.  You should pass a
+# value of "1" the first time.
+#
+# Generated <navPoint> elements are given element IDs of the form
+# "navp#" where # is an integer that equals the playOrder value.
+#
+# The element depth is used both to visually format indents in the
+# generated NCX code and also to determine the maximum depth, which will
+# be reported as a return value from this function.  You should pass a
+# value of "1" when using this to parse the root <nav> element, and
+# every nested element will have a depth one greater.
+#
+# All anchors are assumed to refer to a file named "content.html"
+#
+# Parameters:
+#
+#   1 - reference to parsed <nav> or <node> element content
+#
+#   2 : integer - the first playOrder number to assign
+#
+#   3 : integer - depth of this element
+#
+# Return:
+#
+#   1 : string - the generated NCX code
+#
+#   2 : integer - the total number of <navPoint> elements generated,
+#   including recursively
+#
+#   3 : integer - the maximum depth that was reached recursively
+#
+sub gen_nav {
+  # Should have exactly three arguments
+  ($#_ == 2) or die "Wrong number of arguments, stopped";
+  
+  # Get arguments
+  my $nave  = shift;
+  my $pon   = shift;
+  my $depth = shift;
+  
+  # Check/set types
+  (ref($nave) eq 'ARRAY') or die "Wrong parameter type, stopped";
+  
+  $pon   = int($pon);
+  $depth = int($depth);
+  
+  (($pon > 0) and ($depth > 0)) or
+    die "Invalid parameter values, stopped";
+  
+  # Define result variables with appropriate initial values
+  my $result  = '';
+  my $reached = $depth;
+  my $count   = 0;
+  
+  # Get the appropriate indent for generated elements on this level
+  my $idt = '  ';
+  for(my $i = 0; $i < $depth; $i++) {
+    $idt = $idt . '  ';
+  }
+  
+  # Go through all content
+  for my $e (@$nave) {
+  
+    # Ignore if not a true element
+    if ($e->{'type'} ne 'e') {
+      next;
+    }
+    
+    # Check that element is "node"
+    ($e->{'name'} eq 'node') or
+      die "Unrecognized element type in <nav> in XML metadata, stopped";
+  
+    # Must have name and target attributes
+    (exists $e->{'attrib'}->{'name'}) or
+      die "<node> missing name in XML metadata, stopped";
+    (exists $e->{'attrib'}->{'target'}) or
+      die "<node> missing target in XML metadata, stopped";
+    
+    # Get name and target attributes and validate target
+    my $a_name   = "$e->{'attrib'}->{'name'}";
+    my $a_target = "$e->{'attrib'}->{'target'}";
+    
+    (check_target($a_target)) or
+      die "Invalid target '$a_target', stopped";
+    
+    # If target is just "#" replace it with "content.html" else suffix
+    # it to "content.html"
+    if ($a_target eq '#') {
+      $a_target = "content.html";
+    } else {
+      $a_target = "content.html$a_target";
+    }
+    
+    # Escape name as XML text and target as XML attribute
+    $a_name   = esc_xml_text($a_name);
+    $a_target = esc_xml_att($a_target);
+    
+    # If there is an optional xml:lang attribute, get that and escape as
+    # attribute value
+    my $has_lang = 0;
+    my $new_lang;
+    
+    if (exists $e->{'attrib'}->{'xml:lang'}) {
+      $has_lang = 1;
+      $new_lang = "$e->{'attrib'}->{'xml:lang'}";
+      (check_language_code($new_lang)) or
+        die "Invalid language code '$new_lang', stopped";
+      $new_lang = esc_xml_att($new_lang);
+    }
+  
+    # Get the language suffix, which is empty if there is no explicit
+    # attribute and otherwise adds an xml:lang attribute
+    my $lang_suffix = '';
+    if ($has_lang) {
+      $lang_suffix = " xml:lang=\"$new_lang\"";
+    }
+  
+    # Compute the current playOrder and then increase count
+    my $cpo = $pon + $count;
+    $count++;
+  
+    # Add the new navpoint, but do not close it yet
+    $result = $result . <<EOD;
+$idt<navPoint id="navp$cpo" playOrder="$cpo">
+$idt  <navLabel$lang_suffix>
+$idt    <text>$a_name</text>
+$idt  </navLabel>
+$idt  <content src="$a_target"/>
+EOD
+
+    # Recursive invocation for this element's content
+    my $r_gen;
+    my $r_count;
+    my $r_reached;
+    
+    ($r_gen, $r_count, $r_reached) = gen_nav(
+                                        $e->{'content'},
+                                        $pon + $count,
+                                        $depth + 1);
+    
+    # Update state from recursive results
+    $result = $result . $r_gen;
+    $count = $count + $r_count;
+    if ($r_reached > $reached) {
+      $reached = $r_reached;
+    }
+
+    # Now close this navpoint
+    $result = $result . "$idt</navPoint>\n";
+  }
+  
+  # If we didn't actually add any elements, we never reached this depth,
+  # so decrease reached depth in that case
+  if ($count < 1) {
+    $reached--;
+  }
+  
+  # Return results
+  return ($result, $count, $reached);
+}
+
 # Generate the NCX file.
 #
 # The given reference must be to the content of the parsed <nav> 
@@ -533,8 +711,49 @@ sub gen_ncx {
   (check_language_code($root_lang)) or
     die "Invalid language code '$root_lang', stopped";
   
-  # @@TODO:
-  return 'NCX file';
+  # Recursively generate navigation content
+  my $nav_content;
+  my $nav_count;
+  my $nav_depth;
+  
+  ($nav_content, $nav_count, $nav_depth) = gen_nav($ne, 1, 1);
+  
+  # Make sure we generated at least one navpoint
+  ($nav_count > 0) or
+    die "Must be at least one <node> in <nav> in XML metadata, stopped";
+  
+  # Escape the root language as an XML attribute, the book title as XML
+  # text, and book ID as XML attribute
+  $root_lang  = esc_xml_att($root_lang);
+  $book_title = esc_xml_text($book_title);
+  $book_id    = esc_xml_att($book_id);
+  
+  # Now generate the main text
+  my $ncx_text = <<EOD;
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN"
+  "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx version="2005-1"
+    xml:lang="$root_lang"
+    xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <head>
+    <meta name="dtb:uid" content="$book_id"/>
+    <meta name="dtb:depth" content="$nav_depth"/>
+    <meta name="dtb:generator" content="spoor"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle>
+    <text>$book_title</text>
+  </docTitle>
+  <navMap>
+$nav_content  </navMap>
+</ncx>
+
+EOD
+  
+  # Return the generated NCX file
+  return $ncx_text;
 }
 
 # Recursively case-fold all element names and attribute names to
