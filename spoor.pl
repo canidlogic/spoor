@@ -32,6 +32,8 @@ file for further information.
 # Local functions
 # ===============
 
+# @@TODO: set modification time on all ZIP members
+
 # Check that a language code is valid.
 #
 # This simply checks that the given string is ASCII alphanumeric and
@@ -85,6 +87,9 @@ sub esc_xml_att {
 # A <dc:identifier> element is always included in the generated metadata
 # section that has an element ID of "ebook_uid"
 #
+# The title of the book and unique identifier are also returned, so that
+# these can be included in the NCX file.
+#
 # Parameters:
 #
 #   1 - reference to parsed <metadata> element content
@@ -93,8 +98,12 @@ sub esc_xml_att {
 #
 # Return:
 #
-#   string - the <metadata> section that should be placed in the OPF
+#   1 : string - the <metadata> section that should be placed in the OPF
 #   file, including the <metadata> tags
+#
+#   2 : string - the (unescaped) book title
+#
+#   3 : string - the (unescaped) unique ID of the book
 #
 sub gen_meta {
   # Should have exactly two arguments
@@ -391,8 +400,8 @@ EOD
   # Finish the constructed metadata section
   $meta_str = $meta_str . "  </metadata>\n";
   
-  # Return result
-  return $meta_str;
+  # Return results
+  return ($meta_str, $md{'title'}, $md{'identifier'}->{'value'});
 }
 
 # Generate the manifest section of the OPF file.
@@ -475,6 +484,50 @@ EOD
   
   # Return the generated result
   return $mani_str;
+}
+
+# Generate the NCX file.
+#
+# The given reference must be to the content of the parsed <nav> 
+# element, and this function assumes that fold_elements() has already
+# been applied to it.
+#
+# This function assumes that all links refer to "content.html" or
+# anchors within that file.
+#
+# Parameters:
+#
+#   1 - reference to parsed <nav> element content
+#
+#   2 : string - default language code from the XML root element
+#
+#   3 : string - the (unescaped) title of the E-Book
+#
+#   4 : string - the (unescaped) unique ID of the E-Book
+#
+# Return:
+#
+#   string - the full, generated NCX file
+#
+sub gen_ncx {
+  # Should have exactly four arguments
+  ($#_ == 3) or die "Wrong number of arguments, stopped";
+  
+  # Get the arguments
+  my $ne         = shift;
+  my $root_lang  = shift;
+  my $book_title = shift;
+  my $book_id    = shift;
+  
+  # Check/set types
+  (ref($ne) eq 'ARRAY') or die "Wrong parameter type, stopped";
+  
+  $root_lang  = "$root_lang";
+  $book_title = "$book_title";
+  $book_id    = "$book_id";
+  
+  # @@TODO:
+  return 'NCX file';
 }
 
 # Recursively case-fold all element names and attribute names to
@@ -684,9 +737,14 @@ sub parse_xml {
   ($has_metadata) or die "Missing <metadata> section in XML, stopped";
   ($has_nav) or die "Missing <nav> section in XML, stopped";
   
-  # Build the metadata section
-  my $meta_str = gen_meta($metadata, $root_lang);
+  # Build the metadata section, and also get the title and unique ID of
+  # the E-Book
+  my $meta_str;
+  my $book_title;
+  my $book_id;
   
+  ($meta_str, $book_title, $book_id) = gen_meta($metadata, $root_lang);
+
   # Build the manifest section
   my $mani_str = gen_manifest($ares);
   
@@ -706,10 +764,10 @@ $mani_str
 
 EOD
   
-  # @@TODO:
-  my $ncx_text = "NCX file";
+  # Generate the NCX file
+  my $ncx_text = gen_ncx($nav, $root_lang, $book_title, $book_id);
 
-  # @@TODO:
+  # Return the generated files
   return ($opf_text, $ncx_text);
 }
 
