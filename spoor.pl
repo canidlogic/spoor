@@ -395,6 +395,88 @@ EOD
   return $meta_str;
 }
 
+# Generate the manifest section of the OPF file.
+#
+# The given reference must be to an array of paths to resource files
+# that were passed on the command line.
+#
+# In addition to the resources present in the given array, this function
+# will always generate a resource declaration for "content.html" with an
+# XHTML type, and "toc.ncx" with an NCX type.
+#
+# All manifest items will be given XML element IDs.  "content.html"
+# always has the ID "content" while "toc.ncx" always has the ID "ncx".
+# All resources are given IDs of type "item#" where # is the index of
+# the item in the passed array.  Note that the first item has ID "item0"
+# rather than "item1".
+#
+# Parameters:
+#
+#   1 - array reference to paths of all the extra resource files that
+#   were passed on the command line (may be empty)
+#
+# Return:
+#
+#   string - the <manifest> section that should be placed in the OPF
+#   file, including the <manifest> tags
+#
+sub gen_manifest {
+  # Should have exactly one arguments
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get the argument and check type
+  my $ares = shift;
+  (ref($ares) eq 'ARRAY') or die "Wrong argument type, stopped";
+  
+  # Build the manifest section of the OPF file
+  my $mani_str = <<'EOD';
+  <manifest>
+    <item id="content" href="content.html"
+        media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx"
+        media-type="application/x-dtbncx+xml"/>
+EOD
+  
+  # Declare any additional resources
+  for(my $r = 0; $r < scalar @$ares; $r++) {
+    
+    # Get the filename of this resource
+    my $fname;
+    (undef, undef, $fname) = File::Spec->splitpath($ares->[$r]);
+    
+    # Determine the MIME type
+    my $mime_type;
+    if ($fname =~ /.css$/ui) {
+      $mime_type = "text/css";
+      
+    } elsif ($fname =~ /.png$/ui) {
+      $mime_type = "image/png";
+      
+    } elsif (($fname =~ /.jpg$/ui) || ($fname =~ /.jpeg$/ui)) {
+      $mime_type = "image/jpeg";
+      
+    } elsif ($fname =~ /.svg$/ui) {
+      $mime_type = "image/svg+xml";
+      
+    } else {
+      die "Unrecognized resource file extension for '$fname', stopped";
+    }
+    
+    # Declare resource
+    $fname = esc_xml_att($fname);
+    $mime_type = esc_xml_att($mime_type);
+    
+    $mani_str = $mani_str . "    <item id=\"item$r\" href=\"$fname\"\n";
+    $mani_str = $mani_str . "        media-type=\"$mime_type\"/>\n";
+  }
+  
+  # Finish the manifest section
+  $mani_str = $mani_str . "  </manifest>\n";
+  
+  # Return the generated result
+  return $mani_str;
+}
+
 # Recursively case-fold all element names and attribute names to
 # lowercase in a parsed XML document.
 #
@@ -599,48 +681,10 @@ sub parse_xml {
   # Build the metadata section
   my $meta_str = gen_meta($metadata, $root_lang);
   
-  # Build the manifest section of the OPF file
-  my $mani_str = <<'EOD';
-  <manifest>
-    <item id="content" href="content.html"
-        media-type="application/xhtml+xml"/>
-    <item id="ncx" href="toc.ncx"
-        media-type="application/x-dtbncx+xml"/>
-EOD
+  # Build the manifest section
+  my $mani_str = gen_manifest($ares);
   
-  for(my $r = 0; $r < scalar @$ares; $r++) {
-    
-    # Get the filename of this resource
-    my $fname;
-    (undef, undef, $fname) = File::Spec->splitpath($ares->[$r]);
-    
-    # Determine the MIME type
-    my $mime_type;
-    if ($fname =~ /.css$/ui) {
-      $mime_type = "text/css";
-      
-    } elsif ($fname =~ /.png$/ui) {
-      $mime_type = "image/png";
-      
-    } elsif (($fname =~ /.jpg$/ui) || ($fname =~ /.jpeg$/ui)) {
-      $mime_type = "image/jpeg";
-      
-    } elsif ($fname =~ /.svg$/ui) {
-      $mime_type = "image/svg+xml";
-      
-    } else {
-      die "Unrecognized file extension: '$fname', stopped";
-    }
-    
-    # Declare resource
-    $fname = esc_xml_att($fname);
-    $mime_type = esc_xml_att($mime_type);
-    
-    $mani_str = $mani_str . "    <item id=\"item$r\" href=\"$fname\"\n";
-    $mani_str = $mani_str . "        media-type=\"$mime_type\"/>\n";
-  }
-  
-  $mani_str = $mani_str . "  </manifest>\n";
+  # @@TODO:
   
   # Now put together the whole OPF file
   my $opf_text = <<EOD;
