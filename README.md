@@ -178,11 +178,14 @@ Finally, each node has a `name` that is the name of the section when it appears 
 
 Example of a full navigation section:
 
-    <nav language="en">
+    <nav xml:lang="en">
       <node name="Cover" target="#"/>
       <node name="Introduction" target="#intro">
         <node name="Example subsection" target="#subsection"/>
-        <node name="Je ne sais quoi" target="#wh" language="fr"/>
+        <node name="Je ne sais quoi" target="#wh" xml:lang="fr">
+          <node name="Plus de mots" target="#pdm"/>
+          <node name="English once again" xml:lang="en" target="#en"/>
+        </node>
       </node>
       <node name="Chapter 2: An old ending" target="#chapter2"/>
       <node name="Chapter 3: A new beginning" target="#chapter3"/>
