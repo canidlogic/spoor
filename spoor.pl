@@ -52,6 +52,30 @@ sub check_language_code {
   return 1;
 }
 
+# @@TODO:
+sub check_role {
+  # @@TODO:
+  return 1;
+}
+
+# @@TODO:
+sub check_date {
+  # @@TODO:
+  return 1;
+}
+
+# @@TODO:
+sub esc_xml_text {
+  # @@TODO:
+  return $_[0];
+}
+
+# @@TODO:
+sub esc_xml_att {
+  # @@TODO:
+  return $_[0];
+}
+
 # Recursively case-fold all element names and attribute names to
 # lowercase in a parsed XML document.
 #
@@ -157,6 +181,9 @@ sub fold_elements {
 #
 #   1 : string - the path to the XML metadata file
 #
+#   2 : array ref - the paths to all resources that will be added to
+#   this EPUB
+#
 # Return:
 #
 #   1 : string - the contents of the generated OPF file
@@ -164,12 +191,15 @@ sub fold_elements {
 #   2 : string - the contents of the generated NCX file
 #
 sub parse_xml {
-  # Should have exactly one argument
-  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  # Should have exactly two arguments
+  ($#_ == 1) or die "Wrong number of arguments, stopped";
   
-  # Get argument and set type
+  # Get arguments and set/check type
   my $arg_path = shift;
+  my $ares     = shift;
+  
   $arg_path = "$arg_path";
+  (ref($ares) eq 'ARRAY') or die "Wrong parameter type, stopped";
   
   # Open XML file for reading in UTF-8
   open(my $xml_fh, "< :encoding(utf8)", $arg_path) or
@@ -226,7 +256,7 @@ sub parse_xml {
     if ($e->{'name'} eq 'metadata') {
       # Found the metadata section
       if ($has_metadata == 0) {
-        $metadata = $e;
+        $metadata = $e->{'content'};
         $has_metadata = 1;
       } else {
         die "Multiple <metadata> sections in XML, stopped";
@@ -235,7 +265,7 @@ sub parse_xml {
     } elsif ($e->{'name'} eq 'nav') {
       # Found the nav section
       if ($has_nav == 0) {
-        $nav = $e;
+        $nav = $e->{'content'};
         $has_nav = 1;
       } else {
         die "Multiple <nav> sections in XML, stopped";
@@ -247,8 +277,332 @@ sub parse_xml {
   ($has_metadata) or die "Missing <metadata> section in XML, stopped";
   ($has_nav) or die "Missing <nav> section in XML, stopped";
   
+  # Now go through the metadata section and build a hash of the data
+  my %md;
+  for my $e (@{$metadata}) {
+    # Ignore if not a true element
+    if ($e->{'type'} ne 'e') {
+      next;
+    }
+    
+    # Handle specific element, ignoring unidentified ones
+    if ($e->{'name'} eq 'title') {
+      # Only one title allowed
+      (not exists $md{'title'}) or
+        die "Multiple titles in XML, stopped";
+      
+      # Must have a "text" attribute
+      (exists $e->{'attrib'}->{'text'}) or
+        die "<title> in XML missing text prop, stopped";
+      
+      # Store title
+      $md{'title'} = "$e->{'attrib'}->{'text'}";
+      
+    } elsif ($e->{'name'} eq 'creator') {
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<creator> in XML missing name prop, stopped";
+      
+      # If creator property not defined yet, set to empty array
+      if (not exists $md{'creator'}) {
+        $md{'creator'} = [];
+      }
+      
+      # Create hashref for the new creator
+      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
+      if (exists $e->{'attrib'}->{'role'}) {
+        (check_role($e->{'attrib'}->{'role'})) or
+    die "Invalid XML person role: '$e->{'attrib'}->{'role'}', stopped";
+        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+      }
+      if (exists $e->{'attrib'}->{'sort'}) {
+        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
+      }
+      
+      # Add the new creator
+      push @{$md{'creator'}}, ($new_e);
+      
+    } elsif ($e->{'name'} eq 'description') {
+      # Only one description allowed
+      (not exists $md{'description'}) or
+        die "Multiple descriptions in XML, stopped";
+      
+      # Go through text content to build the full value
+      my $full_str = '';
+      for my $f (@{$e->{'content'}}) {
+        # Verify that this is a text node
+        ($f->{'type'} eq 't') or
+          die "<description> in XML may only contain text, stopped";
+        
+        # Add content to full string
+        $full_str = $full_str . "$f->{'content'}";
+      }
+      
+      # Store description
+      $md{'description'} = $full_str;
+      
+    } elsif ($e->{'name'} eq 'publisher') {
+      # Only one publisher allowed
+      (not exists $md{'publisher'}) or
+        die "Multiple publishers in XML, stopped";
+      
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<publisher> in XML missing name prop, stopped";
+      
+      # Add the publisher
+      $md{'publisher'} = "$e->{'attrib'}->{'name'}";
+      
+    } elsif ($e->{'name'} eq 'contributor') {
+      # Must have a "name" attribute
+      (exists $e->{'attrib'}->{'name'}) or
+        die "<contributor> in XML missing name prop, stopped";
+      
+      # If contributor property not defined yet, set to empty array
+      if (not exists $md{'contributor'}) {
+        $md{'contributor'} = [];
+      }
+      
+      # Create hashref for the new contributor
+      my $new_e = { name => "$e->{'attrib'}->{'name'}"};
+      if (exists $e->{'attrib'}->{'role'}) {
+        (check_role($e->{'attrib'}->{'role'})) or
+    die "Invalid XML person role: '$e->{'attrib'}->{'role'}', stopped";
+        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+      }
+      if (exists $e->{'attrib'}->{'sort'}) {
+        $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
+      }
+      
+      # Add the new contributor
+      push @{$md{'contributor'}}, ($new_e);
+      
+    } elsif ($e->{'name'} eq 'date') {
+      # Must have an "event" and "value" attribute
+      (exists $e->{'attrib'}->{'event'}) or
+        die "<date> in XML missing event prop, stopped";
+      (exists $e->{'attrib'}->{'value'}) or
+        die "<date> in XML missing value prop, stopped";
+      
+      # Get the date type
+      my $dtype = fc($e->{'attrib'}->{'event'});
+      
+      # Check the date type
+      (($dtype eq 'creation') or
+          ($dtype eq 'publication') or
+          ($dtype eq 'modification')) or
+        die "Unknown event type '$dtype' in XML, stopped";
+      
+      # Make sure this particular date is not set yet
+      (not exists $md{"date_$dtype"}) or
+        die "Same date event redefined in XML, stopped";
+      
+      # Get the date value
+      my $dval = "$e->{'attrib'}->{'value'}";
+      
+      # Check the date format
+      (check_date($dval)) or die "Invalid date '$dval' in XML, stopped";
+      
+      # Store the date value
+      $md{"date_$dtype"} = $dval;
+      
+    } elsif ($e->{'name'} eq 'identifier') {
+      # Only one identifier allowed
+      (not exists $md{'identifier'}) or
+        die "Multiple identifiers in XML, stopped";
+      
+      # Must have a "scheme" and "value" attribute
+      (exists $e->{'attrib'}->{'scheme'}) or
+        die "<identifier> in XML missing scheme prop, stopped";
+      (exists $e->{'attrib'}->{'value'}) or
+        die "<identifier> in XML missing value prop, stopped";
+      
+      # Store as a hashref
+      $md{'identifier'} = {
+        scheme => "$e->{'attrib'}->{'scheme'}",
+        value => "$e->{'attrib'}->{'value'}"
+      };
+      
+    } elsif ($e->{'name'} eq 'rights') {
+      # Only one rights allowed
+      (not exists $md{'rights'}) or
+        die "Multiple rights in XML, stopped";
+      
+      # Go through text content to build the full value
+      my $full_str = '';
+      for my $f (@{$e->{'content'}}) {
+        # Verify that this is a text node
+        ($f->{'type'} eq 't') or
+          die "<rights> in XML may only contain text, stopped";
+        
+        # Add content to full string
+        $full_str = $full_str . "$f->{'content'}";
+      }
+      
+      # Store rights
+      $md{'rights'} = $full_str;
+    }
+  }
+  
+  # Check that title and identifier are defined
+  (exists $md{'title'}) or
+    die "Missing <title> in XML, stopped";
+  (exists $md{'identifier'}) or
+    die "Missing <identifier> in XML, stopped";
+  
+  # Build the metadata section of the OPF file
+  my $pval;
+  my $meta_str = <<'EOD';
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"
+            xmlns:opf="http://www.idpf.org/2007/opf">
+EOD
+  
+  $pval = esc_xml_text($md{'title'});
+  $meta_str = $meta_str . "    <dc:title>$md{'title'}</dc:title>\n";
+  
+  if (exists $md{'creator'}) {
+    for my $cr (@{$md{'creator'}}) {
+      $meta_str = $meta_str . "    <dc:creator";
+      if (exists $cr->{'sort'}) {
+        $pval = esc_xml_att($cr->{'sort'});
+        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
+      }
+      if (exists $cr->{'role'}) {
+        $pval = esc_xml_att($cr->{'role'});
+        $meta_str = $meta_str . " opf:role=\"$pval\"";
+      }
+      $pval = esc_xml_text($cr->{'name'});
+      $meta_str = $meta_str . ">$pval</dc:creator>\n";
+    }
+  }
+  
+  if (exists $md{'description'}) {
+    $pval = esc_xml_text($md{'description'});
+    $meta_str = $meta_str
+      . "    <dc:description>$pval</dc:description>\n";
+  }
+  
+  if (exists $md{'publisher'}) {
+    $pval = esc_xml_text($md{'publisher'});
+    $meta_str = $meta_str
+      . "    <dc:publisher>$pval</dc:publisher>\n";
+  }
+  
+  if (exists $md{'contributor'}) {
+    for my $cr (@{$md{'contributor'}}) {
+      $meta_str = $meta_str . "    <dc:contributor";
+      if (exists $cr->{'sort'}) {
+        $pval = esc_xml_att($cr->{'sort'});
+        $meta_str = $meta_str . " opf:file-as=\"$pval\"";
+      }
+      if (exists $cr->{'role'}) {
+        $pval = esc_xml_att($cr->{'role'});
+        $meta_str = $meta_str . " opf:role=\"$pval\"";
+      }
+      $pval = esc_xml_text($cr->{'name'});
+      $meta_str = $meta_str . ">$pval</dc:contributor>\n";
+    }
+  }
+  
+  if (exists $md{'date_creation'}) {
+    $pval = esc_xml_text($md{'date_creation'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"creation\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  if (exists $md{'date_publication'}) {
+    $pval = esc_xml_text($md{'date_publication'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"publication\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  if (exists $md{'date_modification'}) {
+    $pval = esc_xml_text($md{'date_modification'});
+    $meta_str = $meta_str . "    <dc:date opf:event=\"modification\">";
+    $meta_str = $meta_str . "$pval</dc:date>\n";
+  }
+  
+  $pval = esc_xml_att($md{'identifier'}->{'scheme'});
+  $meta_str = $meta_str . "    <dc:identifier id=\"ebook_uid\" "
+                  . "opf:scheme=\"$pval\">";
+  $pval = esc_xml_text($md{'identifier'}->{'value'});
+  $meta_str = $meta_str . "$pval</dc:identifier>\n";
+  
+  $pval = esc_xml_text($root_lang);
+  $meta_str = $meta_str . "    <dc:language>$pval</dc:language>\n";
+  
+  if (exists $md{'rights'}) {
+    $pval = esc_xml_text($md{'rights'});
+    $meta_str = $meta_str
+      . "    <dc:rights>$pval</dc:rights>\n";
+  }
+  
+  $meta_str = $meta_str . "  </metadata>\n";
+  
+  # Build the manifest section of the OPF file
+  my $mani_str = <<'EOD';
+  <manifest>
+    <item id="content" href="content.html"
+        media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx"
+        media-type="application/x-dtbncx+xml"/>
+EOD
+  
+  for(my $r = 0; $r < scalar @$ares; $r++) {
+    
+    # Get the filename of this resource
+    my $fname;
+    (undef, undef, $fname) = File::Spec->splitpath($ares->[$r]);
+    
+    # Determine the MIME type
+    my $mime_type;
+    if ($fname =~ /.css$/ui) {
+      $mime_type = "text/css";
+      
+    } elsif ($fname =~ /.png$/ui) {
+      $mime_type = "image/png";
+      
+    } elsif (($fname =~ /.jpg$/ui) || ($fname =~ /.jpeg$/ui)) {
+      $mime_type = "image/jpeg";
+      
+    } elsif ($fname =~ /.svg$/ui) {
+      $mime_type = "image/svg+xml";
+      
+    } else {
+      die "Unrecognized file extension: '$fname', stopped";
+    }
+    
+    # Declare resource
+    $fname = esc_xml_att($fname);
+    $mime_type = esc_xml_att($mime_type);
+    
+    $mani_str = $mani_str . "    <item id=\"item$r\" href=\"$fname\"\n";
+    $mani_str = $mani_str . "        media-type=\"$mime_type\"/>\n";
+  }
+  
+  $mani_str = $mani_str . "  </manifest>\n";
+  
+  # Now put together the whole OPF file
+  my $opf_text = <<EOD;
+<?xml version="1.0"?>
+<package
+    version="2.0"
+    xmlns="http://www.idpf.org/2007/opf"
+    unique-identifier="ebook_uid">
+$meta_str
+$mani_str
+  <spine toc="ncx">
+    <itemref idref="content" linear="yes"/>
+  </spine>
+</package>
+
+EOD
+  
   # @@TODO:
-  return ("OPF file\n", "NCX file \n");
+  my $ncx_text = "NCX file";
+
+  # @@TODO:
+  return ($opf_text, $ncx_text);
 }
 
 # ==================
@@ -363,7 +717,7 @@ $zip->addDirectory('OEBPS');
 my $opf_text;
 my $ncx_text;
 
-($opf_text, $ncx_text) = parse_xml($arg_xml);
+($opf_text, $ncx_text) = parse_xml($arg_xml, \@arg_res);
 
 # Add the OPF and NCX files
 #
