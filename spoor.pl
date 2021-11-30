@@ -102,6 +102,9 @@ sub esc_xml_att {
 #
 #   2 : string - the code for the language to declare
 #
+#   3 : string - extra metadata to insert, or empty string if no extra
+#   metadata
+#
 # Return:
 #
 #   1 : string - the <metadata> section that should be placed in the OPF
@@ -112,12 +115,13 @@ sub esc_xml_att {
 #   3 : string - the (unescaped) unique ID of the book
 #
 sub gen_meta {
-  # Should have exactly two arguments
-  ($#_ == 1) or die "Wrong number of arguments, stopped";
+  # Should have exactly three arguments
+  ($#_ == 2) or die "Wrong number of arguments, stopped";
   
   # Get arguments
-  my $metadata  = shift;
-  my $root_lang = shift;
+  my $metadata   = shift;
+  my $root_lang  = shift;
+  my $extra_meta = shift;
   
   # Verify that metadata is an array ref
   (ref($metadata) eq 'ARRAY') or die "Wrong argument type, stopped";
@@ -126,6 +130,9 @@ sub gen_meta {
   $root_lang = "$root_lang";
   (check_language_code($root_lang)) or
     die "Invalid language code '$root_lang', stopped";
+  
+  # Set extra metadata to string
+  $extra_meta = "$extra_meta";
   
   # Now go through the metadata section and build a hash of the data in
   # the %md hash
@@ -402,6 +409,9 @@ EOD
     $meta_str = $meta_str
       . "    <dc:rights>$pval</dc:rights>\n";
   }
+  
+  # Insert any extra metadata
+  $meta_str = $meta_str . $extra_meta;
   
   # Finish the constructed metadata section
   $meta_str = $meta_str . "  </metadata>\n";
@@ -887,6 +897,34 @@ sub parse_xml {
   $arg_path = "$arg_path";
   (ref($ares) eq 'ARRAY') or die "Wrong parameter type, stopped";
   
+  # Look for an image file in the file paths with a case-insensitive
+  # name "cover" and store its name (without path) if found
+  my $has_cover = 0;
+  my $cover_name;
+  for my $ar (@$ares) {
+    # Get file name
+    my $fname;
+    (undef, undef, $fname) = File::Spec->splitpath($ar);
+    
+    # Check if we got a match
+    if (($fname =~ /^cover.jpg$/ui) or
+          ($fname =~ /^cover.jpeg$/ui) or
+          ($fname =~ /^cover.png$/ui) or
+          ($fname =~ /^cover.svg$/ui)) {
+      $has_cover = 1;
+      $cover_name = $fname;
+      last;
+    }
+  }
+  
+  # If there is a cover, generate an extra <meta> tag for it, otherwise
+  # set the extra meta data to empty string
+  my $meta_extra = '';
+  if ($has_cover) {
+    $meta_extra =
+      "    <meta name=\"cover\" content=\"$cover_name\"/>\n";
+  }
+  
   # Open XML file for reading in UTF-8
   open(my $xml_fh, "< :encoding(utf8)", $arg_path) or
     die "Failed to open XML file '$arg_path', stopped";
@@ -971,7 +1009,10 @@ sub parse_xml {
   my $book_title;
   my $book_id;
   
-  ($meta_str, $book_title, $book_id) = gen_meta($metadata, $root_lang);
+  ($meta_str, $book_title, $book_id) = gen_meta(
+                                        $metadata,
+                                        $root_lang,
+                                        $meta_extra);
 
   # Build the manifest section
   my $mani_str = gen_manifest($ares);
