@@ -14,6 +14,8 @@ The third argument is the path to an XML file that defines metadata for the E-Bo
 
 After the third argument is a sequence of zero or more resource files that are referenced from the XHTML document and should be packaged within the EPUB file.  The arguments on the command line are the full paths to each resource file.  When packaged in the EPUB file, however, the resource files will always be in the same directory as the XHTML file, so only the filename and extension are actually copied into the EPUB file.  As such, the XHTML file should reference these resource files assuming they are in the same directory, and it also means that the filename with extension of each resource must be unique.
 
+The first resource file that has a name that is a case-insensitive match for `cover` and a file extension that indicates an image file will be set as the cover image for the EPUB file in the metadata declaration.  If there are no resource files matching this description, no cover image will be marked.
+
 The file extension of each resource file _must_ be a case-insensitive match for one of the extensions in the following table:
 
      File extension |                    File type
