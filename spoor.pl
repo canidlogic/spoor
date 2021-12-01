@@ -9,6 +9,7 @@ use Archive::Zip qw( :ERROR_CODES :CONSTANTS);
 use XML::Tiny qw(parsefile);
 
 # Core dependencies
+use Encode qw(encode);
 use File::Spec;
 
 =head1 NAME
@@ -1173,13 +1174,19 @@ my $ncx_text;
 
 ($opf_text, $ncx_text) = parse_xml($arg_xml, \@arg_res);
 
+# Manually encode the OPF and NCX files into UTF-8 since they might
+# include Unicode but the Zip module seems to expect raw bytes
+#
+my $opf_bin = encode("UTF-8", $opf_text);
+my $ncx_bin = encode("UTF-8", $ncx_text);
+
 # Add the OPF and NCX files
 #
-($m = $zip->addString($opf_text, 'OEBPS/content.opf'))
+($m = $zip->addString($opf_bin, 'OEBPS/content.opf'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
   
-($m = $zip->addString($ncx_text, 'OEBPS/toc.ncx'))
+($m = $zip->addString($ncx_bin, 'OEBPS/toc.ncx'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 
