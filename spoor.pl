@@ -1135,12 +1135,14 @@ my $m;
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 $m->desiredCompressionLevel(COMPRESSION_LEVEL_NONE);
+$m->unixFileAttributes(0644);
 
 # Next, we need the META-INF directory
 #
 ($m = $zip->addDirectory('META-INF'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->unixFileAttributes(0755);
 
 # Within the META-INF directory, we need the container.xml file; this
 # file will point to the content.opf file that we will have in the OEBPS
@@ -1162,12 +1164,14 @@ EOD
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
+$m->unixFileAttributes(0644);
 
 # Now create the OEBPS directory that will hold the book content
 #
 ($m = $zip->addDirectory('OEBPS'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->unixFileAttributes(0755);
 
 # Generate the OPF and NCX files from the XML metadata file
 #
@@ -1188,11 +1192,13 @@ my $ncx_bin = encode("UTF-8", $ncx_text);
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
+$m->unixFileAttributes(0644);
   
 ($m = $zip->addString($ncx_bin, 'OEBPS/toc.ncx'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
+$m->unixFileAttributes(0644);
 
 # Transfer the XHTML file into the OEBPS directory, renaming it
 # content.html
@@ -1201,6 +1207,7 @@ $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
 $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
+$m->unixFileAttributes(0644);
 
 # Transfer all resource files into the OEBPS directory, keeping their
 # names but not their directory trees; also, for PNG and JPEG files, do
@@ -1225,6 +1232,7 @@ for my $p (@arg_res) {
   ($m = $zip->addFile($p, "OEBPS/$fname"))
     or die "Failed to add ZIP member, stopped";
   $m->setLastModFileDateTimeFromUnix($ftime);
+  $m->unixFileAttributes(0644);
   if ($needs_compress) {
     $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
   } else {
