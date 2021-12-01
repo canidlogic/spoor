@@ -40,6 +40,9 @@ file for further information.
 # nor last characters are hyphen, and that no two hyphens occur next to
 # each other.
 #
+# This is not a full verification that the language code is fully valid,
+# just a basic syntax check.
+#
 # Parameters:
 #
 #   1 : string - the language code to check
@@ -49,8 +52,34 @@ file for further information.
 #   1 if valid, 0 if not
 #
 sub check_language_code {
-  # @@TODO:
-  return 1;
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Fail if string is not sequence of one or more ASCII alphanumerics
+  # and hyphens
+  unless ($str =~ /^[A-Za-z0-9\-]+$/u) {
+    $valid = 0;
+  }
+  
+  # Fail if first or last character is hyphen
+  if (($str =~ /^\-/u) or ($str =~ /\-$/u)) {
+    $valid = 0;
+  }
+  
+  # Fail if two hyphens in a row
+  if ($str =~ /\-\-/u) {
+    $valid = 0;
+  }
+  
+  # Return validity
+  return $valid;
 }
 
 # @@TODO:
