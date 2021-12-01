@@ -166,10 +166,170 @@ sub check_role {
   return $valid;
 }
 
-# @@TODO:
+# Check that the given date string is valid.
+#
+# The date must be either in YYYY or YYYY-MM or YYYY-MM-DD format.  This
+# function will also verify that the field values make sense.  The
+# earliest supported date is 1582-10-15 (or 1582-10 or 1582) and the
+# latest supported date is 9999-12-31.
+#
+# Parameters:
+#
+#   1 : string - the date string to check
+#
+# Return:
+#
+#   1 if valid, 0 if not
+#
 sub check_date {
-  # @@TODO:
-  return 1;
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Checking depends on the specific format
+  if ($str =~ /^([0-9]{4})\-([0-9]{2})\-([0-9]{2})$/u) {
+    # Year, month, day -- get integer values
+    my $y = int($1);
+    my $m = int($2);
+    my $d = int($3);
+    
+    # Check year in range [1582, 9999]
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+    # For all years but 1582, check that month in range 1-12; for 1582,
+    # check that month in range 10-12
+    if ($valid) {
+      if ($y == 1582) {
+        unless (($m >= 10) and ($m <= 12)) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless (($m >= 1) and ($m <= 12)) {
+          $valid = 0;
+        }
+      }
+    }
+    
+    # For all year/month combinations except 1582-10, check that day of
+    # month is at least one; for 1582-10, check that day is at least 15
+    if ($valid) {
+      if (($y == 1582) and ($m == 10)) {
+        unless ($d >= 15) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless ($d >= 1) {
+          $valid = 0;
+        }
+      }
+    }
+    
+    # Check the upper limit of day depending on specific month and
+    # whether there is a leap year
+    if ($valid) {
+      if (($m == 11) or ($m == 4) or ($m == 6) or ($m == 9)) {
+        # November, April, June, September have 30 days
+        unless ($d <= 30) {
+          $valid = 0;
+        }
+        
+      } elsif ($m == 2) {
+        # February depends on whether there is a leap year -- check
+        # whether this is a leap year
+        my $is_leap = 0;
+        if (($y % 4) == 0) {
+          # Year divisible by four
+          if (($y % 100) == 0) {
+            # Year divisible by four and 100
+            if (($y % 400) == 0) {
+              # Year divisible by four and 100 and 400, so leap year
+              $is_leap = 1;
+              
+            } else {
+              # Year divisible by four and 100 but not 400, so not leap
+              # year
+              $is_leap = 0;
+            }
+            
+          } else {
+            # Year divisible by four but not by 100, so leap year
+            $is_leap = 1;
+          }
+          
+        } else {
+          # Year not divisible by four, so not a leap year
+          $is_leap = 0;
+        }
+        
+        # Check day limit depending on leap year
+        if ($is_leap) {
+          unless ($d <= 29) {
+            $valid = 0;
+          }
+          
+        } else {
+          unless ($d <= 28) {
+            $valid = 0;
+          }
+        }
+        
+      } else {
+        # All other months have 31 days
+        unless ($d <= 31) {
+          $valid = 0;
+        }
+      }
+    }
+    
+  } elsif ($str =~ /^([0-9]{4})\-([0-9]{2})$/u) {
+    # Year and month -- get integer values
+    my $y = int($1);
+    my $m = int($2);
+    
+    # Check year in range [1582, 9999]
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+    # For all years but 1582, check that month in range 1-12; for 1582,
+    # check that month in range 10-12
+    if ($valid) {
+      if ($y == 1582) {
+        unless (($m >= 10) and ($m <= 12)) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless (($m >= 1) and ($m <= 12)) {
+          $valid = 0;
+        }
+      }
+    }
+    
+  } elsif ($str =~ /^[0-9]{4}$/u) {
+    # Year only -- get integer value and check in range [1582, 9999]
+    my $y = int($str);
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+  } else {
+    # Unrecognized format
+    $valid = 0;
+  }
+  
+  # Return validity
+  return $valid;
 }
 
 # @@TODO:
