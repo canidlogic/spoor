@@ -369,16 +369,69 @@ sub check_target {
   return $valid;
 }
 
-# @@TODO:
+# Given an unescaped string, apply XML escaping appropriate for XML
+# content that occurs as character data.
+#
+# This escapes & < > as &amp; &lt; &gt; respectively.
+#
+# Parameters:
+#
+#   1 : string - the unescaped string
+#
+# Return:
+#
+#   the escaped string
+#
 sub esc_xml_text {
-  # @@TODO:
-  return $_[0];
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Escape the ampersand first
+  $str =~ s/&/&amp;/ug;
+  
+  # Escape the other unsafe characters
+  $str =~ s/</&lt;/ug;
+  $str =~ s/>/&gt;/ug;
+  
+  # Return escaped string
+  return $str;
 }
 
-# @@TODO:
+# Given an unescaped string, apply XML escaping appropriate for XML
+# content that occurs within a double-quoted attribute value.
+#
+# This escapes & < > " as &amp; &lt; &gt; &quot; respectively.
+#
+# Parameters:
+#
+#   1 : string - the unescaped string
+#
+# Return:
+#
+#   the escaped string
+#
 sub esc_xml_att {
-  # @@TODO:
-  return $_[0];
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Escape the ampersand first
+  $str =~ s/&/&amp;/ug;
+  
+  # Escape the other unsafe characters
+  $str =~ s/</&lt;/ug;
+  $str =~ s/>/&gt;/ug;
+  $str =~ s/"/&quot;/ug;
+  
+  # Return escaped string
+  return $str;
 }
 
 # Generate the metadata section of the OPF file.
@@ -620,7 +673,7 @@ EOD
   
   # Add the <dc:title> element
   $pval = esc_xml_text($md{'title'});
-  $meta_str = $meta_str . "    <dc:title>$md{'title'}</dc:title>\n";
+  $meta_str = $meta_str . "    <dc:title>$pval</dc:title>\n";
   
   # Add any <dc:creator> elements
   if (exists $md{'creator'}) {
