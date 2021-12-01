@@ -1134,6 +1134,7 @@ my $m;
 ($m = $zip->addString('application/epub+zip', 'mimetype'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->desiredCompressionLevel(COMPRESSION_LEVEL_NONE);
 
 # Next, we need the META-INF directory
 #
@@ -1160,6 +1161,7 @@ EOD
 ($m = $zip->addString($str_container, 'META-INF/container.xml'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
 
 # Now create the OEBPS directory that will hold the book content
 #
@@ -1185,10 +1187,12 @@ my $ncx_bin = encode("UTF-8", $ncx_text);
 ($m = $zip->addString($opf_bin, 'OEBPS/content.opf'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
   
 ($m = $zip->addString($ncx_bin, 'OEBPS/toc.ncx'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
 
 # Transfer the XHTML file into the OEBPS directory, renaming it
 # content.html
@@ -1196,6 +1200,7 @@ $m->setLastModFileDateTimeFromUnix($ftime);
 ($m = $zip->addFile($arg_html, 'OEBPS/content.html'))
   or die "Failed to add ZIP member, stopped";
 $m->setLastModFileDateTimeFromUnix($ftime);
+$m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
 
 # Transfer all resource files into the OEBPS directory, keeping their
 # names but not their directory trees; also, for PNG and JPEG files, do
@@ -1217,14 +1222,14 @@ for my $p (@arg_res) {
   }
   
   # Add the file to the directory
-  if ($needs_compress) {
-    ($m = $zip->addFile($p, "OEBPS/$fname"))
-      or die "Failed to add ZIP member, stopped";
-  } else {
-    ($m = $zip->addFile($p, "OEBPS/$fname", COMPRESSION_LEVEL_NONE))
-      or die "Failed to add ZIP member, stopped";
-  }
+  ($m = $zip->addFile($p, "OEBPS/$fname"))
+    or die "Failed to add ZIP member, stopped";
   $m->setLastModFileDateTimeFromUnix($ftime);
+  if ($needs_compress) {
+    $m->desiredCompressionLevel(COMPRESSION_LEVEL_DEFAULT);
+  } else {
+    $m->desiredCompressionLevel(COMPRESSION_LEVEL_NONE);
+  }
 }
 
 # Write the completed ZIP file to disk
