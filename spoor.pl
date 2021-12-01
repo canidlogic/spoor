@@ -29,6 +29,46 @@ file for further information.
 
 =cut
 
+# =========
+# Constants
+# =========
+
+# Hash that maps all recognized person roles to the value one.
+#
+# All roles given here are in lowercase.
+#
+my %role_codes = (
+  adp => 1,
+  ann => 1,
+  arr => 1,
+  art => 1,
+  asn => 1,
+  aut => 1,
+  aqt => 1,
+  aft => 1,
+  aui => 1,
+  ant => 1,
+  bkp => 1,
+  clb => 1,
+  cmm => 1,
+  dsr => 1,
+  edt => 1,
+  ill => 1,
+  lyr => 1,
+  mdc => 1,
+  mus => 1,
+  nrt => 1,
+  oth => 1,
+  pht => 1,
+  prt => 1,
+  red => 1,
+  rev => 1,
+  spn => 1,
+  ths => 1,
+  trc => 1,
+  trl => 1
+);
+
 # ===============
 # Local functions
 # ===============
@@ -69,23 +109,61 @@ sub check_language_code {
   }
   
   # Fail if first or last character is hyphen
-  if (($str =~ /^\-/u) or ($str =~ /\-$/u)) {
-    $valid = 0;
+  if ($valid) {
+    if (($str =~ /^\-/u) or ($str =~ /\-$/u)) {
+      $valid = 0;
+    }
   }
   
   # Fail if two hyphens in a row
-  if ($str =~ /\-\-/u) {
-    $valid = 0;
+  if ($valid) {
+    if ($str =~ /\-\-/u) {
+      $valid = 0;
+    }
   }
   
   # Return validity
   return $valid;
 }
 
-# @@TODO:
+# Check that the role for a creator or contributor declaration is valid.
+#
+# The role must be exactly three ASCII letters and must be a
+# case-insensitive match for one of the recognized role codes.
+#
+# Parameters:
+#
+#   1 : string - the role code to check
+#
+# Return:
+#
+#   1 if valid, 0 if not
+#
 sub check_role {
-  # @@TODO:
-  return 1;
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Fail if string is not sequence of exactly three ASCII letters
+  unless ($str =~ /^[A-Za-z]{3}$/u) {
+    $valid = 0;
+  }
+  
+  # Fail unless lowercase version of role is in role map
+  if ($valid) {
+    unless (exists $role_codes{lc($str)}) {
+      $valid = 0;
+    }
+  }
+  
+  # Return validity
+  return $valid;
 }
 
 # @@TODO:
@@ -200,7 +278,7 @@ sub gen_meta {
         (check_role($e->{'attrib'}->{'role'})) or
           die "Invalid XML metadata person role: " .
               "'$e->{'attrib'}->{'role'}', stopped";
-        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+        $new_e->{'role'} = lc($e->{'attrib'}->{'role'});
       }
       if (exists $e->{'attrib'}->{'sort'}) {
         $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
@@ -257,7 +335,7 @@ sub gen_meta {
         (check_role($e->{'attrib'}->{'role'})) or
           die "Invalid XML metadata person role: " .
               "'$e->{'attrib'}->{'role'}', stopped";
-        $new_e->{'role'} = "$e->{'attrib'}->{'role'}";
+        $new_e->{'role'} = lc($e->{'attrib'}->{'role'});
       }
       if (exists $e->{'attrib'}->{'sort'}) {
         $new_e->{'sort'} = "$e->{'attrib'}->{'sort'}";
