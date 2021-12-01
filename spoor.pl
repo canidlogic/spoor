@@ -32,8 +32,6 @@ file for further information.
 # Local functions
 # ===============
 
-# @@TODO: set modification time on all ZIP members
-
 # Check that a language code is valid.
 #
 # This simply checks that the given string is ASCII alphanumeric and
@@ -1067,6 +1065,10 @@ if ($#ARGV > 2) {
   push @arg_res, @ARGV[3 .. $#ARGV];
 }
 
+# Capture the current time for use in archive file metadata
+#
+my $ftime = time;
+
 # Make sure everything besides the output file is an existing regular
 # file
 #
@@ -1124,14 +1126,19 @@ for my $p (@arg_res) {
 # Create the ZIP file object
 #
 my $zip = Archive::Zip->new();
+my $m;
 
 # First off, we need to add a mimetype file declaring the file type
 #
-$zip->addString('application/epub+zip', 'mimetype');
+($m = $zip->addString('application/epub+zip', 'mimetype'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Next, we need the META-INF directory
 #
-$zip->addDirectory('META-INF');
+($m = $zip->addDirectory('META-INF'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Within the META-INF directory, we need the container.xml file; this
 # file will point to the content.opf file that we will have in the OEBPS
@@ -1149,11 +1156,15 @@ my $str_container = <<'EOD';
 
 EOD
 
-$zip->addString($str_container, 'META-INF/container.xml');
+($m = $zip->addString($str_container, 'META-INF/container.xml'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Now create the OEBPS directory that will hold the book content
 #
-$zip->addDirectory('OEBPS');
+($m = $zip->addDirectory('OEBPS'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Generate the OPF and NCX files from the XML metadata file
 #
@@ -1164,13 +1175,20 @@ my $ncx_text;
 
 # Add the OPF and NCX files
 #
-$zip->addString($opf_text, 'OEBPS/content.opf');
-$zip->addString($ncx_text, 'OEBPS/toc.ncx');
+($m = $zip->addString($opf_text, 'OEBPS/content.opf'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
+  
+($m = $zip->addString($ncx_text, 'OEBPS/toc.ncx'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Transfer the XHTML file into the OEBPS directory, renaming it
 # content.html
 #
-$zip->addFile($arg_html, 'OEBPS/content.html');
+($m = $zip->addFile($arg_html, 'OEBPS/content.html'))
+  or die "Failed to add ZIP member, stopped";
+$m->setLastModFileDateTimeFromUnix($ftime);
 
 # Transfer all resource files into the OEBPS directory, keeping their
 # names but not their directory trees; also, for PNG and JPEG files, do
@@ -1193,10 +1211,13 @@ for my $p (@arg_res) {
   
   # Add the file to the directory
   if ($needs_compress) {
-    $zip->addFile($p, "OEBPS/$fname");
+    ($m = $zip->addFile($p, "OEBPS/$fname"))
+      or die "Failed to add ZIP member, stopped";
   } else {
-    $zip->addFile($p, "OEBPS/$fname", COMPRESSION_LEVEL_NONE);
+    ($m = $zip->addFile($p, "OEBPS/$fname", COMPRESSION_LEVEL_NONE))
+      or die "Failed to add ZIP member, stopped";
   }
+  $m->setLastModFileDateTimeFromUnix($ftime);
 }
 
 # Write the completed ZIP file to disk
