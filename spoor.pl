@@ -332,10 +332,41 @@ sub check_date {
   return $valid;
 }
 
-# @@TODO:
+# Check whether a navigation target is in the proper format.
+#
+# Navigation targets must either be "#" or "#" followed by an ASCII
+# letter followed by zero or more additional ASCII alphanumerics and
+# underscores.
+#
+# This does NOT check whether the given target actually exists in the
+# content XHTML file.
+#
+# Parameters:
+#
+#   1 : string - the target string to check
+#
+# Return:
+#
+#   1 if valid, 0 if not
+#
 sub check_target {
-  # @@TODO:
-  return 1;
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Check format
+  unless (($str =~ /^#$/u) or ($str =~ /^#[A-Za-z][A-Za-z0-9_]*$/u)) {
+    $valid = 0;
+  }
+  
+  # Return validity
+  return $valid;
 }
 
 # @@TODO:
