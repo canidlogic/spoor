@@ -1,25 +1,25 @@
 # Spoor
 
-Create an EPUB-2 publication from an XHTML source file, an XML metadata file, and any associated image files.
+Compile an EPUB-2 publication from source files.
 
 ## Syntax
 
-    spoor.pl out.epub source.html metadata.xml main.css image1.png image2.jpg
+    spoor.pl [options] [files]
 
-The first argument is the path to the EPUB-2 publication to generate.  If something already exists at this path, it will be overwritten.
+`[options]` is a set of program options.  Some options are required, while others are optional.  The options are documented in the next section.
 
-The second argument is the path to the XHTML file that defines the content of the E-Book.  Spoor does not validate or check the XHTML file in any way.  See "Open Publication Structure (OPS) 2.0.1" for specific recommendations about the XHTML used in EPUB files.  Note that the XHTML file may be given a different filename and extension within the EPUB file, so the XHTML file should not reference itself by name.
+`[files]` is a sequence of one or more paths to the source files to include in the EPUB.  An EPUB is basically a Zip archive of source files together with special metadata.  __The order that files are given on the command line is significant.__
 
-The third argument is the path to an XML file that defines metadata for the E-Book.  The specific XML format used for metadata is defined below.  Note that not everything that is in the XML file is guaranteed to be copied into the EPUB publication.  Only metadata that is supported by Spoor will be copied into the EPUB.
-
-After the third argument is a sequence of zero or more resource files that are referenced from the XHTML document and should be packaged within the EPUB file.  The arguments on the command line are the full paths to each resource file.  When packaged in the EPUB file, however, the resource files will always be in the same directory as the XHTML file, so only the filename and extension are actually copied into the EPUB file.  As such, the XHTML file should reference these resource files assuming they are in the same directory, and it also means that the filename with extension of each resource must be unique.
-
-The first resource file that has a name that is a case-insensitive match for `cover` and a file extension that indicates an image file will be set as the cover image for the EPUB file in the metadata declaration.  If there are no resource files matching this description, no cover image will be marked.
-
-The file extension of each resource file _must_ be a case-insensitive match for one of the extensions in the following table:
+The file extension of each file in `[files]` _must_ be a case-insensitive match for one of the extensions in the following table:
 
      File extension |                    File type
     ================+==================================================
+         .xhtml     |
+         .xht       |
+         .xml       | Extensible HyperText Markup Language 1.1 (XHTML)
+         .html      |
+         .htm       |
+    ----------------+--------------------------------------------------
          .css       | Cascading Style Sheets 2 (CSS2)
     ----------------+--------------------------------------------------
          .png       | Portable Network Graphics (PNG) image
@@ -29,7 +29,15 @@ The file extension of each resource file _must_ be a case-insensitive match for 
     ----------------+--------------------------------------------------
          .svg       | Scalable Vector Graphics 1.1 (SVG)
 
-The filename before the extension must be a sequence of at least one and at most 250 US-ASCII alphanumeric or underscore characters.  In addition, the filename before the extension may not be a case-insensitive match for any of the following (which are special device names under Windows and DOS platforms):
+There must be at least one file of the XHTML type.  The order that XHTML files appear in the `[files]` list determines the order that they will be added to the E-Book.  An implicit page break occurs between each XHTML file.  Although theoretically you should be able to specify page breaks with CSS, in practice many E-Readers do not handle CSS page breaks correctly, so the implicit page breaks between XHTML files are more reliable.  Beware that many E-Readers have incomplete or non-standard interpretations of XHTML/CSS, and that many E-Readers like to override or ignore certain CSS settings.  You are therefore well advised to keep the XHTML/CSS as simple as possible and to test E-Books on target E-Readers.  Spoor does not check XHTML for validity.
+
+__Important:__ Be sure to include an XML declaration `<?xml ?>` at the top of the XHTML files to explicitly declare the character encoding.  E-Readers are not as skilled as mainstream web browsers at deducing the correct character encoding, so you risk character decoding errors unless you explicitly declare the charset.
+
+All resource files referenced from the XHTML file(s) should be included within the EPUB.  Spoor will not check this, though.  The XHTML files and all resource files will be placed within the same directory in the compressed EPUB archive, regardless of the directory paths in the `[files]` arguments.  The filename and extension will be used to name the file within the directory.  __Important:__ this means that when you reference resource files from XHTML, you should always assume that the resource files are in the same directory as the XHTML file.
+
+Note that some EPUB verifiers will throw a warning if you include a resource file such as a cover image that is not referenced from any of the XHTML pages.  To avoid this, you might include a hidden reference to the image in a `div` with style `display: none` so that the resource is referenced but not displayed.
+
+The filename before the extension must be a sequence of at least one US-ASCII alphanumeric or underscore characters.  The total length of the filename with extension must not exceed 255 characters.  In addition, the filename before the extension may not be a case-insensitive match for any of the following (which are special device names under Windows and DOS platforms):
 
 - `AUX`
 - `COM1` ... `COM9`
@@ -38,25 +46,49 @@ The filename before the extension must be a sequence of at least one and at most
 - `NUL`
 - `PRN`
 
-The filename with extension must be unique among all the resource files, even under case-insensitive comparisons.
+Since all files will be placed within the same directory in the EPUB archive, each filename (with extension) must be unique.  For portability, Spoor enforces uniqueness even under case-insensitive comparisons (since not all file systems are case sensitive).
+
+Although Spoor allows for JPEG, PNG, and SVG images, it is recommended that all images be JPEG due to potentially incomplete E-Reader implementations.  Naturally, it's a good idea to use only common JPEG encodings and ignore exotic JPEG encoding options.  Also note that not all E-Readers have color displays, so make sure color images are legible if rendered in black and white.
+
+For privacy, all files that are added to the EPUB Zip archive will have their modification timestamp changed to the time at which Spoor was run, and have their Unix access attributes set to sane standards.  This prevents true timestamps and Unix access attributes from leaking into the Zip archive.  In the NCX file within the archive, Spoor will note that the NCX file was generated by `spoor` (unless the `-stealth` option is specified) but otherwise Spoor attempts to prevent inadvertent metadata leaks so that EPUB files are safe to publish.
+
+## Options
+
+This section documents the specific `[options]` that can be passed to Spoor.  Some of these options are not optional!
+
+    -out [path]
+
+__Required.__  Declare the output file path where the EPUB will be generated.  If something already exists at the given path, it will be overwritten.
+
+    -meta [path]
+
+__Required.__  Declare the path to the XML metadata file that declares additional metadata for E-Book.  The format of this file is described in the next section.  Metadata within this file will be embedded into the EPUB.  However, Spoor does not guarantee that everything in the given XML metadata file will be included in the EPUB.  Only fields that Spoor understands will be included.
+
+    -cover [mode]
+
+_Optional._  The `[mode]` setting must either be `auto` `none` or `force`.  If this option is not specified, the default of `auto` is assumed.  In `auto` mode, the first file in the file list given to Spoor that is an image file type and that has a name that is a case-insensitive match for `cover` will be registered in the metadata as the cover image.  If there is no such image named `cover` then there will be no cover image.  In `none` mode, there is never a cover image, even if an image file is named `cover`.  `force` mode is the same as `auto` mode, except Spoor will include cover image metatags in both EPUB-2 and EPUB-3 style.  This is useful for use with EPUB converters that only support EPUB-3 cover image declarations.  However, note that `force` mode produces EPUB-2 files that are technically incorrect, since the EPUB-3 cover image declaration is not actually supported in EPUB-2.
+
+    -stealth
+
+_Optional._ If present, this prevents Spoor from adding a metadata header to the generated NCX file that says Spoor generated it.  Spoor always sets all timestamps within the EPUB archive to the time at which Spoor was invoked, regardless of the presence of this option.  Spoor also always sets the Unix access permissions of all files within the EPUB archive to `rw-r--r--` and all directories to `rwxr-xr-x` regardless of the presence of this option.  Note that Spoor does not inspect any of the given files for possible metadata leaks, so even if `-stealth` is specified, it is still up to the user to make sure that no unwanted metadata is present in JPEG files, PNG files, and so forth.
 
 ## Metadata XML file format
 
 The top level of the XML metadata file should look like this:
 
     <?xml encoding="UTF-8"?>
-    <spoor format="html" xml:lang="en">
+    <spoor format="multi" xml:lang="en">
       ...
     </spoor>
 
-The `format` attribute is required on the root tag.  Only the `html` format (case insensitive) is currently supported.
+The `format` attribute is required on the root tag.  The two currently supported values are `multi` and `html` (both case insensitive).  `html` mode can only be used when there is exactly one XHTML file, and in this case the navigation section targets are just anchors within that file (see later).  In `multi` mode, there may be more than one XHTML file, and the navigation section targets must name the specific XHTML file in addition to the anchor.
 
 The `xml:lang` attribute is also required on the root tag, which declares the default language used for textual content within the metadata XML file.
 
 Within the top-level element, there are two sections.  The sections may be in any order, but the sections may only appear once each.  Here is the internal section structure:
 
     <?xml encoding="UTF-8"?>
-    <spoor format="html" xml:lang="en">
+    <spoor format="multi" xml:lang="en">
       <metadata>
         ...
       </metadata>
@@ -174,11 +206,13 @@ In this navigation section, all nodes have a declared language of `en` (English)
 
 These language declarations only apply to the name of the section within the navigation section.  They have no relationship to the language actually used for the text within the book (though of course that is usually the same).
 
-Each node has a `target` that indicates the location within the E-Book that the node corresponds to.  Since the `html` format of Spoor only supports a single XHTML file, all targets must be anchor locations within this XHTML file.  If the anchor location `#` is used, it means the location is the start of the XHTML file.  Otherwise, the anchor location must begin with `#`, followed by an ASCII letter, followed by a sequence of zero or more US-ASCII alphanumerics and underscores that specify an element ID within the XHTML file that defines the location.  (Spoor does not actually check whether the anchor exists within the XHTML file.)
+Each node has a `target` that indicates the location within the E-Book that the node corresponds to.  The format of the target varies depending on whether the root `spoor` node has a format of `html` or `multi`.  Since the `html` format of Spoor only supports a single XHTML file, all targets must be anchor locations within this XHTML file.  If the anchor location `#` is used, it means the location is the start of the XHTML file.  Otherwise, the anchor location must begin with `#`, followed by an ASCII letter, followed by a sequence of zero or more US-ASCII alphanumerics and underscores that specify an element ID within the XHTML file that defines the location.  (Spoor does not actually check whether the anchor exists within the XHTML file.)
+
+In the `multi` format, the target must be a case-sensitive match for one of the XHTML files that was passed to Spoor, with an optional anchor after it consisting of a `#` sign followed by an ASCII letter, followed by a sequence of zero or more US-ASCII alphanumerics and underscores that specify an element ID within the XHTML file that defines the location.
 
 Finally, each node has a `name` that is the name of the section when it appears in the navigation structure in the E-Reader.  The language of this text is determined by the language associated with the node, as explained earlier in this section.  No automatic numbering is applied, so if there is some kind of numbering, it should be included in the name.
 
-Example of a full navigation section:
+Example of a full navigation section in `html` format:
 
     <nav xml:lang="en">
       <node name="Cover" target="#"/>
@@ -192,3 +226,5 @@ Example of a full navigation section:
       <node name="Chapter 2: An old ending" target="#chapter2"/>
       <node name="Chapter 3: A new beginning" target="#chapter3"/>
     </nav>
+
+The `multi` format would be the same way, except each target needs an XHTML file name before the anchor.
