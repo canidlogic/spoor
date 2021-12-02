@@ -466,7 +466,7 @@ sub check_target {
           # Anchor is valid, so check that filename is known
           if (exists $file_hash{$fname}) {
             # Found the file, make sure it is HTML type
-            unless ($file_hash{$str}->{'ftype'} eq 'html') {
+            unless ($file_hash{$fname}->{'ftype'} eq 'html') {
               $valid = 0;
             }
             
